@@ -1,0 +1,411 @@
+---
+title: "Home_Credit"
+author: "Michael Hanger"
+date: "2025-02-16"
+output: 
+  html_document:
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Initial Upload
+
+## application_train
+
+```{r setup}
+# Directory
+my_dir <- getwd()
+setwd("C:/Users/mrhan/OneDrive/Desktop/School/Capstone 2/Data")
+
+# Libraries
+
+library(rmarkdown)
+library(knitr)
+library(RWeka)
+library(caret)
+library(rminer)
+library(matrixStats) 
+library(tidyverse)
+library(psych)
+library(C50)
+library(arules)
+library(arulesViz)
+library(ggplot2)
+library(e1071)
+library(rpart)
+library(kernlab)
+library(dplyr)
+
+# Read File
+
+train_raw <- read.csv(file = "application_train.csv", stringsAsFactors = F)
+summary(train_raw[1:22])
+```
+
+# Review Data
+
+
+
+```{r Summaries}
+#str(train_raw[100:122])
+summary(train_raw[1:15])
+```
+
+## Early Notes
+
+TARGET 0 is target
+DAYS_EMPLOYED needs to be filtered for below 300000
+AMT_INCOME_TOTAL max is 117mm, needs to be filtered.
+EXT_SOURCE columns binned to quartiles
+
+
+# Assigning data
+
+```{r new df}
+#Preparing df to modify
+train_factored <- train_raw
+```
+
+## Condensing and Binning
+
+EXT_Source items binned using original quartiles for ease.
+
+```{r plots}
+train_factored <- train_factored[,-1]
+train_factored <- train_factored[,-21]
+train_factored$AMT_ANNUITY[is.na(train_factored$AMT_ANNUITY)] <- 0
+train_factored$AMT_GOODS_PRICE[is.na(train_factored$AMT_GOODS_PRICE)] <- 0
+train_factored$CNT_FAM_MEMBERS[is.na(train_factored$CNT_FAM_MEMBERS)] <- 2
+train_factored$EXT_SOURCE_1[is.na(train_factored$EXT_SOURCE_1)] <- 0
+train_factored$EXT_SOURCE_2[is.na(train_factored$EXT_SOURCE_2)] <- 0
+train_factored$EXT_SOURCE_3[is.na(train_factored$EXT_SOURCE_3)] <- 0
+train_factored$EXT_SOURCE_1[train_factored$EXT_SOURCE_1=="NULL"] <- 0
+train_factored$EXT_SOURCE_2[train_factored$EXT_SOURCE_2=="NULL"] <- 0
+train_factored$EXT_SOURCE_3[train_factored$EXT_SOURCE_3=="NULL"] <- 0
+train_factored$EXT_SOURCE_1 <- cut(train_factored$EXT_SOURCE_1, breaks = c(0, .33, .5, .68, 1))
+train_factored$EXT_SOURCE_2 <- cut(train_factored$EXT_SOURCE_2, breaks = c(0, .3925, .5144, .6636, 1))
+train_factored$EXT_SOURCE_3 <- cut(train_factored$EXT_SOURCE_3, breaks = c(0, .37, .51, .67, 1))
+
+summary(train_factored)
+```
+
+## Factoring Items
+
+```{r factoring}
+#Factor non-continuous data
+train_factored$TARGET <- factor(train_factored$TARGET)
+train_factored$NAME_CONTRACT_TYPE <- factor(train_factored$NAME_CONTRACT_TYPE)
+train_factored$CODE_GENDER <- factor(train_factored$CODE_GENDER)
+train_factored$FLAG_OWN_CAR <- factor(train_factored$FLAG_OWN_CAR)
+train_factored$FLAG_OWN_REALTY <- factor(train_factored$FLAG_OWN_REALTY)
+train_factored$CNT_CHILDREN <- factor(train_factored$CNT_CHILDREN)
+train_factored$NAME_TYPE_SUITE <- factor(train_factored$NAME_TYPE_SUITE)
+train_factored$NAME_INCOME_TYPE <- factor(train_factored$NAME_INCOME_TYPE)
+train_factored$NAME_EDUCATION_TYPE <- factor(train_factored$NAME_EDUCATION_TYPE)
+train_factored$NAME_FAMILY_STATUS <- factor(train_factored$NAME_FAMILY_STATUS)
+train_factored$NAME_HOUSING_TYPE <- factor(train_factored$NAME_HOUSING_TYPE)
+train_factored$FLAG_MOBIL <- factor(train_factored$FLAG_MOBIL)
+train_factored$FLAG_EMP_PHONE <- factor(train_factored$FLAG_EMP_PHONE)
+train_factored$FLAG_WORK_PHONE <- factor(train_factored$FLAG_WORK_PHONE)
+train_factored$FLAG_CONT_MOBILE <- factor(train_factored$FLAG_CONT_MOBILE)
+train_factored$FLAG_PHONE <- factor(train_factored$FLAG_PHONE)
+train_factored$FLAG_EMAIL <- factor(train_factored$FLAG_EMAIL)
+train_factored$OCCUPATION_TYPE <- factor(train_factored$OCCUPATION_TYPE)
+train_factored$REGION_RATING_CLIENT <- factor(train_factored$REGION_RATING_CLIENT)
+train_factored$REGION_RATING_CLIENT_W_CITY <- factor(train_factored$REGION_RATING_CLIENT_W_CITY)
+train_factored$WEEKDAY_APPR_PROCESS_START <- factor(train_factored$WEEKDAY_APPR_PROCESS_START)
+train_factored$REG_REGION_NOT_LIVE_REGION <- factor(train_factored$REG_REGION_NOT_LIVE_REGION)
+train_factored$REG_REGION_NOT_WORK_REGION <- factor(train_factored$REG_REGION_NOT_WORK_REGION)
+train_factored$LIVE_REGION_NOT_WORK_REGION <- factor(train_factored$LIVE_REGION_NOT_WORK_REGION)
+train_factored$REG_CITY_NOT_LIVE_CITY <- factor(train_factored$REG_CITY_NOT_LIVE_CITY)
+train_factored$REG_CITY_NOT_WORK_CITY <- factor(train_factored$REG_CITY_NOT_WORK_CITY)
+train_factored$LIVE_CITY_NOT_WORK_CITY <- factor(train_factored$LIVE_CITY_NOT_WORK_CITY)
+train_factored$ORGANIZATION_TYPE <- factor(train_factored$ORGANIZATION_TYPE)
+train_factored$FONDKAPREMONT_MODE <- factor(train_factored$FONDKAPREMONT_MODE)
+train_factored$HOUSETYPE_MODE <- factor(train_factored$HOUSETYPE_MODE)
+train_factored$WALLSMATERIAL_MODE <- factor(train_factored$WALLSMATERIAL_MODE)
+train_factored$EMERGENCYSTATE_MODE <- factor(train_factored$EMERGENCYSTATE_MODE)
+train_factored$FLAG_DOCUMENT_2 <- factor(train_factored$FLAG_DOCUMENT_2)
+train_factored$FLAG_DOCUMENT_3 <- factor(train_factored$FLAG_DOCUMENT_3)
+train_factored$FLAG_DOCUMENT_4 <- factor(train_factored$FLAG_DOCUMENT_4)
+train_factored$FLAG_DOCUMENT_5 <- factor(train_factored$FLAG_DOCUMENT_5)
+train_factored$FLAG_DOCUMENT_6 <- factor(train_factored$FLAG_DOCUMENT_6)
+train_factored$FLAG_DOCUMENT_7 <- factor(train_factored$FLAG_DOCUMENT_7)
+train_factored$FLAG_DOCUMENT_8 <- factor(train_factored$FLAG_DOCUMENT_8)
+train_factored$FLAG_DOCUMENT_9 <- factor(train_factored$FLAG_DOCUMENT_9)
+train_factored$FLAG_DOCUMENT_10 <- factor(train_factored$FLAG_DOCUMENT_10)
+train_factored$FLAG_DOCUMENT_11 <- factor(train_factored$FLAG_DOCUMENT_11)
+train_factored$FLAG_DOCUMENT_12 <- factor(train_factored$FLAG_DOCUMENT_12)
+train_factored$FLAG_DOCUMENT_13 <- factor(train_factored$FLAG_DOCUMENT_13)
+train_factored$FLAG_DOCUMENT_14 <- factor(train_factored$FLAG_DOCUMENT_14)
+train_factored$FLAG_DOCUMENT_15 <- factor(train_factored$FLAG_DOCUMENT_15)
+train_factored$FLAG_DOCUMENT_16 <- factor(train_factored$FLAG_DOCUMENT_16)
+train_factored$FLAG_DOCUMENT_17 <- factor(train_factored$FLAG_DOCUMENT_17)
+train_factored$FLAG_DOCUMENT_18 <- factor(train_factored$FLAG_DOCUMENT_18)
+train_factored$FLAG_DOCUMENT_19 <- factor(train_factored$FLAG_DOCUMENT_19)
+train_factored$FLAG_DOCUMENT_20 <- factor(train_factored$FLAG_DOCUMENT_20)
+train_factored$FLAG_DOCUMENT_21 <- factor(train_factored$FLAG_DOCUMENT_21)
+
+#Verify data is as expected
+summary(train_factored)
+```
+
+# Graphs
+
+## Bar Graphs proportional
+
+```{r bargraph for loop}
+
+for (i in colnames(train_factored)) {
+  print(ggplot() + geom_bar(aes(fill = train_factored$TARGET, y = train_factored[[i]]), position = "fill") +ggtitle(print(i)))
+  }
+
+```
+
+## BoxPlots
+
+```{r boxplot for loop}
+
+for (i in colnames(train_factored)) {
+  print(ggplot() + geom_boxplot(aes(x = train_factored$TARGET, y = train_factored[[i]])) + ggtitle(print(i)))
+  }
+
+```
+
+
+# Testing Random
+
+```{r random tests}
+rough_c5 <- C5.0(formula = train_factored$TARGET ~ ., data = train_factored[2:20])
+rough_c5$size
+```
+
+# N/A Check
+
+```{r check for missing}
+
+#Check for N/A data
+train_factored |>
+  summarize(across(everything(), ~ sum(. == "")))
+```
+
+## CV function defined for future use
+
+```{r cv function}
+cv <- function(df, target, nFolds, seedVal, prediction_method, metric_list)
+{
+  # create folds
+  set.seed(seedVal)
+  folds = createFolds(df[,target],nFolds) 
+  # perform cross validation
+  cv_results <- lapply(folds, function(x)
+  { 
+    test_target <- df[x,target]
+    test_input  <- df[x,-target]
+
+    train_target <- df[-x,target]
+    train_input <- df[-x,-target]
+
+    prediction_model <- prediction_method(train_target~.,train_input) 
+    pred<- predict(prediction_model,test_input)
+    return(mmetric(test_target,pred,c("ACC","PRECISION","TPR","F1")))
+  })
+  # generate means and sds and show cv results, means and sds using kable
+  cv_results_m <- as.matrix(as.data.frame(cv_results))
+  cv_mean<- as.matrix(rowMeans(cv_results_m))
+  cv_sd <- as.matrix(rowSds(cv_results_m))
+  colnames(cv_mean) <- "Mean"
+  colnames(cv_sd) <- "Sd"
+  cv_all <- cbind(cv_results_m, cv_mean, cv_sd)
+  kable(cv_all,digits=2)
+}
+```
+
+# Partition training data
+
+```{r partition}
+#Create sample train data set for timely analysis
+partition_data <- createDataPartition(train_factored$TARGET, p = .2, list = FALSE)
+
+train_sample <- train_factored[partition_data,]
+
+# Ensure data is as expected
+train_sample |> summarize(across(everything(), ~ sum(. == "")))
+```
+
+
+```{r test run}
+#Create metrics list to use
+metrics_list <- c("CONF","ACC","PRECISION","TPR","F1")
+
+#Training sample run through simple k means
+model_kmeans <- SimpleKMeans(train_sample, Weka_control(N=2, init = 0, V=TRUE))
+predict_kmeans <- factor(predict(model_kmeans, train_sample))
+mmetric(train_sample$TARGET, predict_kmeans, metrics_list)
+
+```
+
+```{r IBk}
+base_ibk <- IBk(train_sample$TARGET ~ ., train_sample[,-1])
+base_ibk_predict <- predict(base_ibk, train_sample[,-1])
+mmetric(train_sample$TARGET, base_ibk_predict, metrics_list)
+
+```
+
+```{r Define cv_IBk}
+
+cv_IBk <- function(df, target, nFolds, seedVal, metrics_list, k, i)
+{
+set.seed(seedVal)
+folds = createFolds(df[,target],nFolds)
+
+cv_results <- lapply(folds, function(x)
+{ 
+  test_target <- df[x,target]
+  test_input <- df[x,-target]
+  
+  train_target <- df[-x,target]
+  train_input <- df[-x,-target]
+  pred_model <- IBk(train_target ~ .,data = train_input,control = Weka_control(K=k,I=i))  
+  pred <- predict(pred_model, test_input)
+  train_pred <- predict(pred_model, train_input)
+  
+  return(mmetric(test_target,pred,c("ACC","PRECISION","TPR","F1")))
+})
+
+cv_results_m <- as.matrix(as.data.frame(cv_results))
+cv_mean<- as.matrix(rowMeans(cv_results_m))
+cv_sd <- as.matrix(rowSds(cv_results_m))
+colnames(cv_mean) <- "Mean"
+colnames(cv_sd) <- "Sd"
+cv_df <- data.frame(t(cbind(cv_mean,cv_sd))) %>% round(2)
+cv_df$param_K <- k
+cv_df$param_I <- as.logical(i)
+#cv_df <- cv_df %>% rownames_to_column(var = "measure")
+cv_df
+}
+```
+
+
+
+```{r cvIBk}
+cv_IBk(train_sample, 1, 3, 1122, metrics_list, 2, TRUE)
+
+cv_IBk(train_sample, 1, 7, 1122, metrics_list, 2, TRUE)
+
+cv_IBk(train_sample, 1, 3, 1122, metrics_list, 4, TRUE)
+
+cv_IBk(train_sample, 1, 7, 1122, metrics_list, 4, TRUE)
+```
+
+Separate columns into groups to test together with target variable, specifically groups with no N/As to be able to use other functions.
+
+```{r group flags}
+
+#Create document flags group
+flags_group <- train_sample[,95:114]
+flags_group$TARGET <- train_sample$TARGET
+
+#Create EXT_SOURCE group
+ext_group <- train_sample[,40:42]
+ext_group$TARGET <- train_sample$TARGET
+
+cv_IBk(ext_group, 4, 3, 1122, metrics_list, 3, TRUE)
+```
+
+
+## Naive Bayes
+
+```{r Naive Bayes model}
+#Training Sample Data
+
+model_bayes <- naiveBayes(train_sample$TARGET ~ ., train_sample[,-1])
+pred_bayes_train <- predict(model_bayes, train_sample[,-1])
+mmetric(train_sample[,1], pred_bayes_train, metrics_list)
+
+# EXT_SOURCE data
+
+model_bayes <- naiveBayes(ext_group$TARGET ~ ., ext_group[,-4])
+pred_bayes_train <- predict(model_bayes, ext_group[,-4])
+mmetric(ext_group[,4], pred_bayes_train, metrics_list)
+```
+
+# Import POS_CASH_balance
+
+```{r import POS cash}
+
+POS_raw <- read.csv(file = "POS_CASH_balance.csv", stringsAsFactors = F)
+POS_raw$NAME_CONTRACT_STATUS <- factor(POS_raw$NAME_CONTRACT_STATUS)
+```
+
+
+# Merge POS_Cash/Train
+
+```{r merge target to balance}
+
+# merge target onto POS data for simplicity in early analysis
+
+balance_train <- merge(x = train_raw, y = POS_raw, by.x = "SK_ID_CURR", by.y = "SK_ID_CURR", all = TRUE)
+
+# retain only POS and TARGET information
+
+balance_train_clean <- balance_train[123:129]
+balance_train_clean$TARGET <- factor(balance_train$TARGET)
+summary(balance_train_clean)
+
+```
+
+## Graphs
+
+```{r merged graphs to target}
+balance_train_clean |> ggplot() +
+  geom_boxplot(aes(x = TARGET, y = MONTHS_BALANCE)) +
+  ggtitle("MONTHS_BALANCE")
+
+balance_train_clean |> ggplot() +
+  geom_boxplot(aes(x = TARGET, y = CNT_INSTALMENT)) +
+  ggtitle("CNT_INSTALMENT")
+
+balance_train_clean |> ggplot() +
+  geom_boxplot(aes(x = TARGET, y = CNT_INSTALMENT_FUTURE)) +
+  ggtitle("CNT_INSTALMENT_FUTURE")
+
+balance_train_clean |> ggplot() +
+  geom_bar(aes(fill = TARGET, y = NAME_CONTRACT_STATUS), position = "fill") +
+  ggtitle("NAME_CONTRACT_STATUS")
+
+balance_train_clean |> ggplot() +
+  geom_boxplot(aes(x = TARGET, y = SK_DPD)) +
+  ggtitle("SK_DPD")
+
+balance_train_clean |> ggplot() +
+  geom_boxplot(aes(x = TARGET, y = SK_DPD_DEF)) +
+  ggtitle("SK_DPD_DEF")
+
+```
+
+# Summary
+
+## Training Data
+
+Initial analysis shows some variables appear to have very weak relationships, while others have strong relationships. Some loans have a higher default risk. Cash loans have a higher chance of going delinquent compared to cash loans, for example. Men also have a higher default proportion than women. In total, there are 72 variables identified through initial exploration that may be relevant. Some of these variables look like they have minor implications, but corresponding with other data points could prove very valuable. 
+
+There are also certain data points that appear to be extremely relevant. Flag 4, for example. All people under category 1 were in good standing, while a proportion of those in category 0 of Flag 4 were not. Flag 10 showed the same results.
+
+Some variables also appear to have similar impacts as one another. Further testing will be needed to determine if they are independent or dependent of one another or a shared root cause. 
+
+## POS_CASH Data
+
+This data set has a few columns which could also be useful to determining target data. Months Balance, Count Installment Future, and Name Contract Status all seem to be useful. These items need to be condensed to be more useful and confirm relevance, however. Suggesting using averages in data to condense into a single row for all under same ID to then transmute over to the training|test data information, respectively.
+
+## Preliminary Tests,
+
+Initial testing using proportion of random assignment is, as expected, over fit under the models used for preliminary analysis. More in-depth analysis and merging tables will be done in further testing with various methods. I have ruled out IBk, NaiveBayes, and simple k means as effective analysis tools in the data's current form.
+
+# Conclusion
+
+We have plenty of good data to use and will need to determine if more needs to be ruled out. Further work needs to be completed to join additional data from other sources into a usable form that best merges with the target variable. 
+
+Data did need to be modified and transformed. There is a lot of N/A items in the data, but those fields appear to tell as much information relevant to the goal as any other source. Clean data is rare, so factoring and binning to account for the missing data is the best way forward. Due to car age data being so sparse, it was removed from the data as it will likely be less reliable. 
